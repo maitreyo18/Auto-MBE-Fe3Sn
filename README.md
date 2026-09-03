@@ -9,8 +9,8 @@ using a trained Random Forest model checkpoint from previous experimental data.
 ## Installation
 
 ```bash
-conda create -n Synth_KG python=3.10
-conda activate Synth_KG
+conda create -n Auto-MBE python=3.10
+conda activate Auto-MBE
 pip install -r requirements.txt
 ```
 
