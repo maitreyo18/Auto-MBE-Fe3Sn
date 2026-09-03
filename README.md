@@ -76,7 +76,7 @@ together in one turn when needed:
 | `rheed_quality` | Extracts `Substrate_quality` (0-100) and raw diffraction features from a RHEED image. |
 | `predict_quality` | Predicts `RHEED_Quality_Film` and `EDS_ratio` (Fe:Sn stoichiometry) from growth parameters, via pre-trained random forests. |
 | `analyze_previous_experiments` | Looks up and summarizes/ranks past runs from `data/train_compiled.csv`. |
-| `run_active_learning_loop` | Suggests the next filament power / flux ratio to try, via Expected Improvement. |
+| `run_active_learning_loop` | Suggests the next set of process parameters to try, via Expected Improvement. |
 
 ## Film / substrate quality calculator
 
