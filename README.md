@@ -1,9 +1,10 @@
-# Auto-MBE
+# Auto-MBE (Fe3Sn thin-films)
 
 An LLM agent for an MBE (Molecular Beam Epitaxy) growth lab. It reads RHEED
-images, predicts film quality/stoichiometry from growth parameters, looks up
+images, predicts film (/substrate) quality/stoichiometry from growth parameters, looks up
 and analyzes past experiments, and runs an active-learning loop to suggest
-the next experiment to run.
+the next best process parameters to run. The film quality and stoichiometry is predicted
+using a trained Random Forest model checkpoint from previous experimental data.
 
 ## Installation
 
