@@ -11,6 +11,7 @@ using a trained Random Forest model checkpoint from previous experimental data.
 ```bash
 conda create -n Auto-MBE python=3.10
 conda activate Auto-MBE
+git clone https://github.com/maitreyo18/Auto-MBE-Fe3Sn.git
 pip install -r requirements.txt
 ```
 
