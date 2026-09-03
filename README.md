@@ -136,9 +136,9 @@ Each iteration saves an EI contour plot and the fold models used under
 `agent/al_runs/iteration_N/`. No pre-trained checkpoint is used -- it fits
 fresh on whatever `initial_data` you give it.
 
-NOTE: the only limitation of the current AL alogorithm is that the RF models are trained 
+NOTE: The only limitation of the current AL algorithm is that the RF models are trained 
 iteratively on the synthetic data. The AL loop agent can be easily modified to give access 
-to real time experimental data on demand in an actual lab setting.
+to on-demand experimental data in an actual lab setting.
 
 ## Example prompts
 
