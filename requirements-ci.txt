@@ -1,0 +1,18 @@
+# Minimal install for CI: only what tests/, models/, agent/, and
+# RHEED_images/ actually import. Deliberately excludes the heavy
+# GPU/LLM-training stack pinned in requirements.txt (torch, transformers,
+# accelerate, bitsandbytes, nvidia-*) since nothing under test needs it and
+# it would make CI slow and flaky on CPU-only runners.
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+matplotlib==3.10.9
+joblib==1.5.3
+opencv-python-headless==5.0.0.93
+langchain-core==1.6.1
+langgraph==1.0.9
+langgraph-prebuilt==1.0.8
+pytest==8.3.4
+pytest-cov==6.0.0
+ruff==0.8.6

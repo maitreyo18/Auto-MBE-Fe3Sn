@@ -1,7 +1,11 @@
+import logging
 import os
 import warnings
 
 warnings.filterwarnings("ignore")
+
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("mbe_agent")
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -28,7 +32,19 @@ flux_ratio, Substrate_quality, EDS_ratio, RHEED_Quality_Film.
 When reporting numbers, write them as plain text -- never wrap numbers in
 $...$ or other LaTeX/math notation. Always attach the correct unit: W for
 filament power, s for growth time, % for substrate quality and film quality.
-EDS ratio and flux ratio are unitless."""
+EDS ratio and flux ratio are unitless.
+
+Only when the user explicitly asks for a DoE, "design of experiments",
+"D-optimal design", or an optimal set of experiments to run next: first call
+get_doe_suggested_ranges and ask the user to confirm or override each
+parameter's range -- do not call run_doe_experiment until they respond
+(unaddressed ranges fall back to the suggested default). Then call
+run_doe_experiment and report, in full: the design_table as a markdown
+table, the quadratic fit as a markdown table of coefficients/std_error plus
+residual_std_dev, three_sigma, and r_squared, and the optimum input
+parameters with their predicted Score_Holistic/EDS_ratio/RHEED_Quality_Film.
+Do not use this workflow for single-point predictions (predict_quality) or
+iterative optimization (run_active_learning_loop)."""
 
 # Set to a non-empty string to run that request once instead of the REPL.
 USER_PROMPT = ""
@@ -48,12 +64,16 @@ def extract_text(content):
 
 def run(agent, history, user_message):
     history.append(("user", user_message))
-    result = agent.invoke({"messages": history})
+    try:
+        result = agent.invoke({"messages": history})
+    except Exception:
+        history.pop()
+        logger.exception("Agent invocation failed for message: %r", user_message)
+        return "Sorry, something went wrong while processing that request. Please try again."
 
     used_tools = any(getattr(m, "type", None) == "tool" for m in result["messages"])
     if used_tools:
-        print("Agent running...")
-        print("Agent run completed.")
+        logger.info("Agent used one or more tools to answer this request.")
 
     reply = result["messages"][-1]
     history.append((reply.type, reply.content))

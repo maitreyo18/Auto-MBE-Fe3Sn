@@ -2,8 +2,9 @@
 
 An LLM agent for an MBE (Molecular Beam Epitaxy) growth lab. It reads RHEED
 images, predicts film quality/stoichiometry from growth parameters, looks up
-and analyzes past experiments, and runs an active-learning loop to suggest
-the next experiment to run.
+and analyzes past experiments, runs an active-learning loop to suggest the
+next experiment to run, and runs a D-optimal DoE to jointly optimize film
+quality and stoichiometry over a parameter range.
 
 ## Installation
 
@@ -76,6 +77,8 @@ together in one turn when needed:
 | `predict_quality` | Predicts `RHEED_Quality_Film` and `EDS_ratio` (Fe:Sn stoichiometry) from growth parameters, via pre-trained random forests. |
 | `analyze_previous_experiments` | Looks up and summarizes/ranks past runs from `data/train_compiled.csv`. |
 | `run_active_learning_loop` | Suggests the next filament power / flux ratio to try, via Expected Improvement. |
+| `get_doe_suggested_ranges` | Returns min/max of growthtime, filamentpower, flux_ratio from past data, for DoE range confirmation. |
+| `run_doe_experiment` | Runs a D-optimal DoE over growthtime/filamentpower/flux_ratio, fits a quadratic response surface, returns the optimum. |
 
 ## Film / substrate quality calculator
 
@@ -134,6 +137,30 @@ Each iteration saves an EI contour plot and the fold models used under
 `agent/al_runs/iteration_N/`. No pre-trained checkpoint is used -- it fits
 fresh on whatever `initial_data` you give it.
 
+## D-optimal DoE algorithm
+
+`agent/doe.py` runs an autonomous D-optimal Design of Experiments over
+`growthtime`, `filamentpower`, `flux_ratio` (holding `Substrate_quality`
+fixed at the historical median), jointly optimizing film quality and
+stoichiometry:
+
+1. Build a grid candidate pool over the given (or default, CSV-derived)
+   ranges, coded to [-1, 1].
+2. Select `n_runs` points via coordinate-exchange D-optimal search,
+   maximizing `det(F'F)` of the quadratic model matrix
+   `[1, x1, x2, x3, x1^2, x2^2, x3^2, x1*x2, x1*x3, x2*x3]`.
+3. Evaluate each selected point with the existing `EDS_ratio` /
+   `RHEED_Quality_Film` surrogates (mean predictions only) and combine into
+   the same `Score_Holistic` used by the AL loop (65% film quality + 35%
+   stoichiometry closeness).
+4. Fit a quadratic response surface to `Score_Holistic` via least squares;
+   report each term's coefficient and standard error, the residual standard
+   deviation, its 3-sigma bound, and R-squared.
+5. Maximize the fitted surface (multi-start L-BFGS-B) within the given
+   ranges to report the optimum `(growthtime, filamentpower, flux_ratio)`.
+
+Defaults to 12 runs (quadratic terms + 2, the minimum for a stable fit).
+
 ## Example prompts
 
 **`rheed_quality`**
@@ -149,6 +176,10 @@ fresh on whatever `initial_data` you give it.
 **`run_active_learning_loop`**
 > Given these 6 past runs [...], suggest the next 3 experiments to try.
 > Optimize filament power and flux ratio for the best film quality over 10 iterations.
+
+**`run_doe_experiment`**
+> Run a D-optimal DoE using the default ranges.
+> Run a DoE with growth time 300-600 and 20 runs.
 
 ## Credits
 

@@ -8,6 +8,8 @@ from pathlib import Path
 from scipy.stats import norm
 from sklearn.ensemble import RandomForestRegressor
 
+from validation import require_columns, require_positive_int
+
 THIS_DIR = Path(__file__).resolve().parent
 
 FEATURES = ["growthtime", "filamentpower", "flux_ratio", "Substrate_quality"]
@@ -153,6 +155,10 @@ def run_al_loop(initial_data, n_iterations=DEFAULT_N_ITERATIONS, out_dir=None):
     treated as the outcome for the suggested point, appended to the dataset,
     and the next iteration refits on the growing dataset. Saves a plot and
     all forests used for every iteration under out_dir/iteration_N/."""
+    require_columns(initial_data, FEATURES + ["EDS_ratio", "RHEED_Quality_Film"], "initial_data")
+    require_positive_int(n_iterations, "n_iterations")
+    if len(initial_data) < 2:
+        raise ValueError("initial_data needs at least 2 rows to fit a surrogate model")
     df = pd.DataFrame(initial_data)
     out_dir = Path(out_dir) if out_dir else THIS_DIR / "al_runs"
 

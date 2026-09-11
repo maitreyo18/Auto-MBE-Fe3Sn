@@ -11,6 +11,8 @@ sys.path.insert(0, str(THIS_DIR.parent / "models"))
 from feature_extractor import extract_rheed_quality
 from predict import predict_with_uncertainty
 from al_loop import run_al_loop
+from doe import run_doe, default_ranges as doe_default_ranges
+from validation import require_finite, require_positive_int
 
 DATA_PATH = THIS_DIR.parent / "data" / "train_compiled.csv"
 PARAM_COLS = [
@@ -42,6 +44,10 @@ def predict_quality(growthtime: float, filamentpower: float, flux_ratio: float, 
     call rheed_quality first to obtain it.
     Returns RHEED_Quality_Film and EDS_ratio (the raw Fe:Sn stoichiometry
     ratio -- target 3.0), both mean model predictions."""
+    growthtime = require_finite(growthtime, "growthtime")
+    filamentpower = require_finite(filamentpower, "filamentpower")
+    flux_ratio = require_finite(flux_ratio, "flux_ratio")
+    substrate_quality = require_finite(substrate_quality, "substrate_quality")
     X = [[growthtime, filamentpower, flux_ratio, substrate_quality]]
     eds_mean, _ = predict_with_uncertainty(X, "EDS_ratio")
     film_mean, _ = predict_with_uncertainty(X, "RHEED_Quality_Film")
@@ -72,6 +78,7 @@ def run_active_learning_loop(initial_data: List[Dict[str, float]], n_iterations:
     agent/al_runs/iteration_N/. Use when the user asks to optimize, explore,
     or suggest the next experiment(s) -- not for predicting a single known
     configuration."""
+    require_positive_int(n_iterations, "n_iterations")
     return run_al_loop(initial_data, n_iterations=n_iterations)
 
 
@@ -127,4 +134,70 @@ def analyze_previous_experiments(
     return result
 
 
-TOOLS = [rheed_quality, predict_quality, run_active_learning_loop, analyze_previous_experiments]
+@tool
+def get_doe_suggested_ranges() -> dict:
+    """Returns the min/max of growthtime, filamentpower, and flux_ratio
+    observed in data/train_compiled.csv. Use this FIRST whenever the user
+    asks to run a DoE / design of experiments, so you can propose these as
+    default ranges and ask the user to confirm or override them (per
+    parameter) before calling run_doe_experiment."""
+    ranges = doe_default_ranges()
+    return {p: {"min": lo, "max": hi} for p, (lo, hi) in ranges.items()}
+
+
+@tool
+def run_doe_experiment(
+    growthtime_min: Optional[float] = None,
+    growthtime_max: Optional[float] = None,
+    filamentpower_min: Optional[float] = None,
+    filamentpower_max: Optional[float] = None,
+    flux_ratio_min: Optional[float] = None,
+    flux_ratio_max: Optional[float] = None,
+    n_runs: int = 12,
+) -> dict:
+    """Runs an autonomous D-optimal Design of Experiments (DoE) over
+    growthtime, filamentpower, and flux_ratio to jointly optimize film
+    quality (RHEED_Quality_Film) and stoichiometry (EDS_ratio). Use ONLY
+    when the user explicitly asks for a DoE, "design of experiments",
+    "D-optimal design", or an optimal set of experiments to run next --
+    NOT for a single-point prediction (use predict_quality) and NOT for the
+    iterative Expected-Improvement search (use run_active_learning_loop).
+
+    Call get_doe_suggested_ranges first and ask the user to confirm or
+    override each parameter's (min, max) range before calling this. Any
+    bound left as None falls back to that data-driven default. n_runs
+    defaults to 12 (quadratic terms + 2, the minimum for a stable fit) and
+    is auto-raised to that floor if lower.
+
+    Selects n_runs design points via coordinate-exchange D-optimal search,
+    evaluates each with the film-quality/stoichiometry surrogates (mean
+    predictions only, combined into the same Score_Holistic as the AL loop),
+    fits a quadratic response surface, and returns design_table (every run's
+    predictions), quadratic_fit (coefficients with std errors, residual std
+    dev, 3-sigma, R-squared), and optimum (the best growthtime/filamentpower/
+    flux_ratio within the given ranges)."""
+    ranges = {
+        "growthtime": (growthtime_min, growthtime_max) if growthtime_min is not None or growthtime_max is not None else None,
+        "filamentpower": (filamentpower_min, filamentpower_max) if filamentpower_min is not None or filamentpower_max is not None else None,
+        "flux_ratio": (flux_ratio_min, flux_ratio_max) if flux_ratio_min is not None or flux_ratio_max is not None else None,
+    }
+    defaults = doe_default_ranges()
+    resolved = {}
+    for p, bounds in ranges.items():
+        if bounds is None:
+            resolved[p] = defaults[p]
+        else:
+            lo = bounds[0] if bounds[0] is not None else defaults[p][0]
+            hi = bounds[1] if bounds[1] is not None else defaults[p][1]
+            resolved[p] = (lo, hi)
+    return run_doe(ranges=resolved, n_runs=n_runs)
+
+
+TOOLS = [
+    rheed_quality,
+    predict_quality,
+    run_active_learning_loop,
+    analyze_previous_experiments,
+    get_doe_suggested_ranges,
+    run_doe_experiment,
+]
