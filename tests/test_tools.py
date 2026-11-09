@@ -8,30 +8,12 @@ def test_tools_registered():
     names = {t.name for t in tools.TOOLS}
     assert names == {
         "rheed_quality",
-        "predict_quality",
         "run_active_learning_loop",
         "analyze_previous_experiments",
         "get_doe_suggested_ranges",
         "run_doe_experiment",
+        "ask_model_builder",
     }
-
-
-def test_predict_quality_happy_path():
-    result = tools.predict_quality.invoke({
-        "growthtime": 400.0, "filamentpower": 4.0, "flux_ratio": 0.8, "substrate_quality": 70.0,
-    })
-    assert set(result) == {"EDS_ratio", "RHEED_Quality_Film"}
-    assert isinstance(result["EDS_ratio"], float)
-    assert isinstance(result["RHEED_Quality_Film"], float)
-
-
-@pytest.mark.parametrize("bad_kwargs", [
-    {"growthtime": float("nan"), "filamentpower": 4.0, "flux_ratio": 0.8, "substrate_quality": 70.0},
-    {"growthtime": float("inf"), "filamentpower": 4.0, "flux_ratio": 0.8, "substrate_quality": 70.0},
-])
-def test_predict_quality_rejects_non_finite(bad_kwargs):
-    with pytest.raises(Exception):
-        tools.predict_quality.invoke(bad_kwargs)
 
 
 def test_analyze_previous_experiments_summary():
@@ -51,6 +33,62 @@ def test_analyze_previous_experiments_sort_by_and_top_n():
         "sort_by": "RHEED_Quality_Film", "top_n": 3, "ascending": False,
     })
     assert len(result["top_runs"]) == 3
+
+
+def test_analyze_covers_all_21_growths_by_default():
+    assert tools.analyze_previous_experiments.invoke({})["n_runs"] == 21
+    assert tools.analyze_previous_experiments.invoke({"dataset": "initial"})["n_runs"] == 17
+    assert tools.analyze_previous_experiments.invoke({"dataset": "later"})["n_runs"] == 4
+
+
+def test_analyze_sort_matches_pandas():
+    result = tools.analyze_previous_experiments.invoke({"sort_by": "RHEED_Quality_Film", "top_n": 2})
+    assert [r["run"] for r in result["top_runs"]] == [24, 14]
+    low = tools.analyze_previous_experiments.invoke({"sort_by": "RHEED_Quality_Film", "ascending": True, "top_n": 1})
+    assert low["top_runs"][0]["run"] == 31
+
+
+def test_analyze_closest_to_exact_run_conditions_finds_that_run():
+    result = tools.analyze_previous_experiments.invoke({
+        "closest_to": {"growthtime": 570.0, "filamentpower": 5.413968, "flux_ratio": 0.578034682}, "top_n": 3,
+    })
+    rows = result["closest_runs"]
+    assert rows[0]["run"] == 14 and rows[0]["distance"] == pytest.approx(0, abs=1e-3)
+    assert [r["distance"] for r in rows] == sorted(r["distance"] for r in rows)
+    assert rows[0]["difference_from_requested"]["growthtime"] == pytest.approx(0)
+
+
+def test_analyze_closest_to_target_value():
+    rows = tools.analyze_previous_experiments.invoke({"closest_to": {"EDS_ratio": 3.0}, "top_n": 3})["closest_runs"]
+    gaps = [abs(r["EDS_ratio"] - 3.0) for r in rows]
+    assert gaps == sorted(gaps) and gaps[0] <= 0.05
+
+
+def test_analyze_filters_and_empty_result():
+    result = tools.analyze_previous_experiments.invoke({"filters": {"filamentpower": [5.0, 6.0]}, "sort_by": "EDS_ratio"})
+    assert 0 < result["n_runs"] < 21 and all(r["filamentpower"] >= 5 for r in result["top_runs"])
+    empty = tools.analyze_previous_experiments.invoke({"filters": {"filamentpower": [100.0, 200.0]}})
+    assert empty["n_runs"] == 0 and "note" in empty
+
+
+def test_analyze_compare_runs_reports_spread_and_missing():
+    result = tools.analyze_previous_experiments.invoke({"compare_runs": [14, 24, 999]})
+    assert [r["run"] for r in result["compared_runs"]] == [14, 24]
+    assert result["runs_not_found"] == [999] and result["compared_spread"]["RHEED_Quality_Film"] > 0
+
+
+def test_analyze_flags_only_relevant_imputed_eds():
+    result = tools.analyze_previous_experiments.invoke({"compare_runs": [31, 33]})
+    assert result["eds_imputed_runs"] == [31]
+    assert "eds_note" not in tools.analyze_previous_experiments.invoke({"compare_runs": [14, 33]})
+
+
+def test_analyze_other_columns_and_bad_inputs():
+    result = tools.analyze_previous_experiments.invoke({"columns": ["subcurve_variance"], "compare_runs": [14]})
+    assert "subcurve_variance" in result["compared_runs"][0]
+    assert "error" in tools.analyze_previous_experiments.invoke({"closest_to": {"bogus": 1.0}})
+    assert "error" in tools.analyze_previous_experiments.invoke({"filters": {"flux_ratio": [2.0, 1.0]}})
+    assert "error" in tools.analyze_previous_experiments.invoke({"top_n": 0})
 
 
 def test_get_doe_suggested_ranges_shape():
@@ -96,11 +134,5 @@ def test_run_doe_experiment_partial_override(monkeypatch):
 
 
 def test_run_active_learning_loop_rejects_bad_n_iterations():
-    rows = [
-        {"growthtime": 400, "filamentpower": 4.0, "flux_ratio": 0.8,
-         "Substrate_quality": 70, "EDS_ratio": 3.0, "RHEED_Quality_Film": 60},
-        {"growthtime": 450, "filamentpower": 4.2, "flux_ratio": 0.9,
-         "Substrate_quality": 72, "EDS_ratio": 2.8, "RHEED_Quality_Film": 65},
-    ]
     with pytest.raises(ValueError):
-        tools.run_active_learning_loop.invoke({"initial_data": rows, "n_iterations": 0})
+        tools.run_active_learning_loop.invoke({"n_iterations": 0})

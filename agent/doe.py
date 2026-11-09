@@ -1,8 +1,8 @@
 """D-optimal Design of Experiments over growthtime/filamentpower/flux_ratio.
-Evaluates each design point with the film-quality/stoichiometry surrogates,
-combines into the same Score_Holistic used by al_loop.py, fits a quadratic
-response surface, and returns the optimum. Substrate_quality is held fixed
-at the historical median (not a DoE parameter)."""
+Evaluates each design point with the ground-truth models (film-quality MLP and
+stoichiometry RFR), combines into the same Score_Holistic used by al_loop.py,
+fits a quadratic response surface, and returns the optimum. Substrate_quality
+and the 6 raw substrate numbers are held fixed at their historical medians."""
 import sys
 from itertools import product
 from pathlib import Path
@@ -14,6 +14,7 @@ from scipy.optimize import minimize
 THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(THIS_DIR.parent / "models"))
 
+from lab_models import SUBSTRATE_RAW  # noqa: E402
 from predict import predict_with_uncertainty  # noqa: E402
 from validation import require_range, require_positive_int  # noqa: E402
 
@@ -150,6 +151,13 @@ def run_doe(ranges=None, n_runs=DEFAULT_N_RUNS, resolution=CANDIDATE_RESOLUTION,
                 resolved_ranges[p] = (lo, hi)
 
     fixed_substrate_quality = float(df[FIXED_FEATURE].median())
+    fixed_substrate_raw = [float(df[c].median()) for c in SUBSTRATE_RAW]
+
+    def eds_inputs(points):
+        return np.column_stack([points, np.full(len(points), fixed_substrate_quality)])
+
+    def film_inputs(points):
+        return np.column_stack([eds_inputs(points), np.tile(fixed_substrate_raw, (len(points), 1))])
 
     lo = np.array([resolved_ranges[p][0] for p in DOE_PARAMS])
     hi = np.array([resolved_ranges[p][1] for p in DOE_PARAMS])
@@ -161,9 +169,8 @@ def run_doe(ranges=None, n_runs=DEFAULT_N_RUNS, resolution=CANDIDATE_RESOLUTION,
     design_points = candidates[selected_idx]
     design_norm = _normalize(design_points, lo, hi)
 
-    X_model = np.column_stack([design_points, np.full(len(design_points), fixed_substrate_quality)])
-    eds_mean, _ = predict_with_uncertainty(X_model, "EDS_ratio")
-    film_mean, _ = predict_with_uncertainty(X_model, "RHEED_Quality_Film")
+    eds_mean, _ = predict_with_uncertainty(eds_inputs(design_points), "EDS_ratio")
+    film_mean, _ = predict_with_uncertainty(film_inputs(design_points), "RHEED_Quality_Film")
     score_holistic = FILM_WEIGHT * film_mean + EDS_WEIGHT * stoichiometry_score(eds_mean)
 
     F = _quadratic_design_matrix(design_norm)
@@ -208,9 +215,9 @@ def run_doe(ranges=None, n_runs=DEFAULT_N_RUNS, resolution=CANDIDATE_RESOLUTION,
             best_val, best_x = -res.fun, res.x
 
     optimum_raw = _denormalize(best_x, lo, hi)
-    optimum_X = np.array([[optimum_raw[0], optimum_raw[1], optimum_raw[2], fixed_substrate_quality]])
-    optimum_eds_mean, _ = predict_with_uncertainty(optimum_X, "EDS_ratio")
-    optimum_film_mean, _ = predict_with_uncertainty(optimum_X, "RHEED_Quality_Film")
+    optimum_point = optimum_raw.reshape(1, -1)
+    optimum_eds_mean, _ = predict_with_uncertainty(eds_inputs(optimum_point), "EDS_ratio")
+    optimum_film_mean, _ = predict_with_uncertainty(film_inputs(optimum_point), "RHEED_Quality_Film")
 
     design_table = []
     for i in range(len(design_points)):
@@ -228,6 +235,7 @@ def run_doe(ranges=None, n_runs=DEFAULT_N_RUNS, resolution=CANDIDATE_RESOLUTION,
     return {
         "ranges_used": {p: [round(resolved_ranges[p][0], 4), round(resolved_ranges[p][1], 4)] for p in DOE_PARAMS},
         "fixed_Substrate_quality": round(fixed_substrate_quality, 2),
+        "fixed_substrate_raw": {c: round(v, 4) for c, v in zip(SUBSTRATE_RAW, fixed_substrate_raw)},
         "n_runs": len(design_points),
         "design_table": design_table,
         "quadratic_fit": {

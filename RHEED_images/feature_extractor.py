@@ -27,9 +27,10 @@ SEARCH_RADIUS = 90
 
 THIS_DIR = Path(__file__).resolve().parent
 
-# Existing compiled dataset, used to normalize the new image's raw features
-# against the same scale as the rest of the training data.
+# All 21 growths (17 training + 4 test), the set the stored Substrate_quality
+# values are scaled over. Used to normalize the new image's raw features.
 COMPILED_DATA_PATH = THIS_DIR.parent / "data" / "train_compiled.csv"
+TEST_DATA_PATH = THIS_DIR.parent / "data" / "test_compiled.csv"
 
 
 def process_streak_width(img):
@@ -315,9 +316,10 @@ def compute_substrate_quality(subcfwhm, sublfwhm, subrfwhm, submean_width, subcu
     if COMPILED_DATA_PATH.exists():
         df = pd.read_csv(COMPILED_DATA_PATH)
         if all(c in df.columns for c in score_cols):
-            combined = pd.concat(
-                [df[score_cols], pd.DataFrame([new_row])], ignore_index=True
-            )
+            frames = [df[score_cols], pd.DataFrame([new_row])]
+            if TEST_DATA_PATH.exists():
+                frames.insert(1, pd.read_csv(TEST_DATA_PATH)[score_cols])
+            combined = pd.concat(frames, ignore_index=True)
             scaler = MinMaxScaler()
             scaled = pd.DataFrame(
                 scaler.fit_transform(combined[score_cols]), columns=score_cols

@@ -5,15 +5,21 @@ import doe
 
 
 @pytest.fixture(autouse=True)
-def patched_data_path(monkeypatch, synthetic_csv):
-    monkeypatch.setattr(doe, "DATA_PATH", synthetic_csv)
+def patched_data_path(monkeypatch, tmp_path, synthetic_df):
+    df = synthetic_df.copy()
+    for col in doe.SUBSTRATE_RAW:
+        df[col] = 40.0
+    path = tmp_path / "doe_data.csv"
+    df.to_csv(path, index=False)
+    monkeypatch.setattr(doe, "DATA_PATH", path)
 
 
 @pytest.fixture
 def stub_predictions(monkeypatch):
     """Deterministic stand-in for the RF surrogates."""
-    def fake_predict(X, target_name, scaler=None):
+    def fake_predict(X, target_name):
         X = np.asarray(X, dtype=float)
+        assert X.shape[1] == (4 if target_name == "EDS_ratio" else 10)
         if target_name == "EDS_ratio":
             mean = 3.0 + 0.001 * X[:, 0] - 0.01 * X[:, 1]
         else:
@@ -117,3 +123,10 @@ def test_run_doe_n_runs_floor_applies(stub_predictions):
     result = doe.run_doe(n_runs=1, resolution=8, seed=3)
     # auto-raised to n_terms + 2 = 12
     assert result["n_runs"] == 12
+
+
+def test_run_doe_with_the_real_ground_truth_models(monkeypatch):
+    monkeypatch.setattr(doe, "DATA_PATH", doe.THIS_DIR.parent / "data" / "train_compiled.csv")
+    result = doe.run_doe(n_runs=12, resolution=6, seed=1)
+    assert len(result["design_table"]) == 12
+    assert set(result["fixed_substrate_raw"]) == set(doe.SUBSTRATE_RAW)

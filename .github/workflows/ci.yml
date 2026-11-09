@@ -71,10 +71,8 @@ jobs:
         run: |
           cd agent
           python -c "
-          import pandas as pd
           from al_loop import run_al_loop
-          rows = pd.read_csv('../data/train_compiled.csv').to_dict(orient='records')
-          results = run_al_loop(rows, n_iterations=1, out_dir='/tmp/al_smoke')
+          results = run_al_loop(n_iterations=1, out_dir='/tmp/al_smoke')
           assert len(results) == 1
           print('AL smoke test OK:', results[0]['suggested_filamentpower'])
           "

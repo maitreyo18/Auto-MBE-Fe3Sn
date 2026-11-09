@@ -44,3 +44,17 @@ def test_compute_substrate_quality_in_bounds_with_real_data():
 def test_extract_rheed_quality_rejects_missing_file(tmp_path):
     with pytest.raises(ValueError):
         fe.extract_rheed_quality(tmp_path / "nope.png")
+
+
+def test_existing_image_reproduces_its_stored_substrate_quality():
+    from pathlib import Path
+
+    import pandas as pd
+
+    image = Path(fe.__file__).parent / "substrate" / "train" / "10.3.png"
+    row = fe.extract_rheed_quality(image)
+    stored = pd.read_csv(fe.COMPILED_DATA_PATH).set_index("run").loc[10]
+    assert fe.TEST_DATA_PATH.exists()
+    assert row["Substrate_quality"] == pytest.approx(stored["Substrate_quality"], abs=0.01)
+    assert {"subcfwhm", "sublfwhm", "subrfwhm", "submean_width", "subwidth_variance",
+            "subcurve_variance"} <= set(row)

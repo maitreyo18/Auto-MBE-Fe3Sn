@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 .env
+model_builder_results/
+agent/al_runs/
