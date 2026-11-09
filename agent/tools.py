@@ -16,9 +16,11 @@ from validation import require_positive_int
 
 @tool
 def rheed_quality(image_path: str) -> dict:
-    """Extracts substrate quality from a RHEED image.
-    Use when the user gives an image path. Returns Substrate_quality (0-100)
-    plus raw diffraction features."""
+    """Extracts features from a RHEED image. The image type is identified from
+    the name (<run>.3.png = substrate, <run>.1.png = film) or its folder.
+    Substrate image: returns Substrate_quality (0-100) plus the raw diffraction
+    features used by the models. Film image: returns the film streak features
+    and RHEED_Film_Score (0-100, the film quality % computed from the image). Use when the user gives an image path."""
     path = Path(image_path)
     if not path.is_absolute():
         path = (THIS_DIR / path).resolve()

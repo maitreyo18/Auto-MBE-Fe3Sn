@@ -125,12 +125,12 @@ processed CSV):
 
 | Target | Test RMSE | Predicting the training mean | 5-fold CV on the 17 (mean baseline) |
 |---|---|---|---|
-| `RHEED_Quality_Film` | 9.99 | 16.57 | 15.67 (17.51) |
-| `EDS_ratio` | 0.36 | 0.43 | 0.77 (0.99) |
+| `RHEED_Quality_Film` | 10.06 | 16.57 | 15.66 (17.51) |
+| `EDS_ratio` | 0.35 | 0.43 | 0.77 (0.99) |
 
 Treat these as rough: there are only 4 test rows, the models were chosen using these
 same rows, and EDS for runs 32 and 35 is imputed in the source data. On the 2 runs with
-measured EDS, the RFR (RMSE 0.25) does no better than the training mean. The reported
+measured EDS, the RFR (RMSE 0.22) does no better than the training mean. The reported
 uncertainty (spread across CV folds for the MLP, across trees for the RFR) is far
 smaller than the real error.
 
